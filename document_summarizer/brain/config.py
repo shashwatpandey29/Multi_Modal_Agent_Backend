@@ -1,0 +1,5 @@
+CHAT_MODEL = "phi3:mini"
+ANALYSIS_MODEL = "phi3:mini"
+CHUNK_SIZE = 350
+CHUNK_OVERLAP = 40
+TOP_K = 4

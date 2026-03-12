@@ -1,0 +1,183 @@
+[2026-02-10 12:33:58,311] [INFO] ResearchBrain :: Ingesting paper...
+[2026-02-10 12:34:00,504] [INFO] ResearchBrain :: Ingestion complete
+[2026-02-10 12:36:00,594] [ERROR] OllamaLLM :: LLM generation failed: Command '['ollama', 'run', 'llama3:latest']' timed out after 120 seconds
+[2026-02-10 13:04:32,823] [INFO] ResearchBrain :: Ingesting paper...
+[2026-02-10 13:04:34,949] [INFO] ResearchBrain :: Ingestion complete
+[2026-02-10 13:37:35,197] [INFO] ResearchBrain :: Ingesting paper for the first time
+[2026-02-10 13:44:02,838] [WARNING] ResearchBrain :: FAISS index missing, rebuilding from stored chunks
+[2026-02-10 13:44:03,460] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-10 13:55:38,256] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-10 14:09:29,194] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-10 14:36:03,070] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-10 14:38:37,111] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-10 14:42:11,867] [INFO] ResearchBrain :: Ingesting paper for the first time
+[2026-02-10 14:42:14,080] [INFO] ResearchBrain :: Ingestion complete (persisted)
+[2026-02-10 15:05:44,704] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-10 15:08:48,323] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-10 15:09:19,043] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-10 15:12:18,375] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-10 15:12:50,802] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-10 15:14:01,666] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-10 15:14:15,444] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-10 15:56:55,924] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-10 15:56:58,480] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-10 15:57:07,735] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-10 15:57:13,280] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-10 16:01:25,625] [INFO] ResearchBrain :: Ingesting paper for the first time
+[2026-02-10 16:01:36,335] [INFO] ResearchBrain :: Generating paper analysis (summary & insights)
+[2026-02-10 16:06:36,381] [ERROR] OllamaLLM :: Ollama timed out
+[2026-02-11 10:28:25,834] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:28:38,073] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:28:38,074] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 10:28:42,934] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:28:42,934] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 10:28:45,185] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:28:45,186] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 10:28:45,230] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:30:35,973] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:30:35,973] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 10:30:39,732] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:30:39,733] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 10:30:39,767] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:31:30,749] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:31:30,750] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 10:31:30,847] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:31:59,076] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:31:59,078] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 10:32:00,940] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:32:00,941] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 10:32:01,007] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:32:38,519] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:32:38,533] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 10:32:42,560] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:32:42,560] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 10:32:42,630] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:33:22,186] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:33:22,188] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 10:33:22,231] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:37:38,658] [INFO] ResearchBrain :: Ingesting paper for the first time
+[2026-02-11 10:37:44,772] [INFO] ResearchBrain :: Generating paper analysis (summary & insights)
+[2026-02-11 10:42:44,837] [ERROR] OllamaLLM :: Ollama timed out
+[2026-02-11 10:43:45,481] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:54:00,918] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 10:54:07,431] [INFO] ResearchBrain :: Ingesting paper for the first time
+[2026-02-11 10:54:16,671] [INFO] ResearchBrain :: Generating paper analysis (summary & insights)
+[2026-02-11 10:59:16,756] [ERROR] OllamaLLM :: Ollama timed out
+[2026-02-11 10:59:16,759] [ERROR] ResearchBrain :: Error generating summary: LLM response timeout
+[2026-02-11 11:01:09,006] [INFO] ResearchBrain :: Ingestion complete (persisted + analyzed)
+[2026-02-11 11:18:27,091] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 11:18:27,092] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 11:18:27,126] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 11:18:35,737] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 11:18:35,739] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 11:18:37,421] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 11:18:37,427] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 11:18:37,497] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 11:22:01,452] [INFO] ResearchBrain :: Ingesting paper for the first time
+[2026-02-11 11:22:12,503] [INFO] ResearchBrain :: Generating paper analysis (summary & insights)
+[2026-02-11 11:27:06,481] [INFO] ResearchBrain :: Ingestion complete (persisted + analyzed)
+[2026-02-11 11:27:18,170] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 11:27:18,171] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 11:27:19,243] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 11:27:19,246] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 11:27:19,286] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 11:28:26,996] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 11:28:26,997] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 11:28:28,100] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 11:28:28,101] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 11:28:28,145] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 11:28:34,571] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 11:28:34,573] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 11:28:35,623] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 11:28:35,627] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 11:28:35,663] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 11:44:22,986] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 11:45:25,900] [INFO] ResearchBrain :: Ingesting paper for the first time
+[2026-02-11 11:45:29,388] [INFO] ResearchBrain :: Generating paper analysis (summary & insights)
+[2026-02-11 11:51:33,164] [INFO] ResearchBrain :: Ingestion complete (persisted + analyzed)
+[2026-02-11 11:54:33,569] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 11:54:42,403] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 11:55:55,214] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 12:40:02,006] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 12:40:27,311] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 12:41:27,042] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 12:42:03,338] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 12:43:00,761] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 12:43:22,256] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 12:43:40,343] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 12:44:57,225] [INFO] ResearchBrain :: Ingesting paper for the first time
+[2026-02-11 12:44:58,983] [INFO] ResearchBrain :: Generating paper analysis (summary & insights)
+[2026-02-11 12:50:41,723] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 12:50:58,223] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 12:59:26,398] [INFO] ResearchBrain :: Ingesting paper for the first time
+[2026-02-11 12:59:31,277] [INFO] ResearchBrain :: Generating paper analysis (summary & insights)
+[2026-02-11 13:12:50,674] [INFO] ResearchBrain :: Ingesting paper for the first time
+[2026-02-11 13:12:54,844] [INFO] ResearchBrain :: Generating paper analysis (summary & insights)
+[2026-02-11 13:17:05,588] [INFO] ResearchBrain :: Ingestion complete (persisted + analyzed)
+[2026-02-11 13:18:19,311] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:18:19,312] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 13:18:35,992] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:18:46,838] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:18:46,838] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 13:19:10,270] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:19:10,271] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 13:19:10,586] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:19:10,587] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 13:19:26,203] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:20:01,900] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:20:01,901] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 13:20:07,096] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:20:25,381] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:20:25,382] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 13:20:30,938] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:21:25,714] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:21:25,715] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 13:21:44,732] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:21:44,733] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 13:24:09,416] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:24:09,417] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 13:24:21,292] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:24:33,374] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:24:33,374] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 13:25:06,525] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:25:06,525] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 13:25:06,876] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:25:06,878] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 13:25:11,862] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:26:18,712] [INFO] ResearchBrain :: Ingesting paper for the first time
+[2026-02-11 13:26:20,349] [INFO] ResearchBrain :: Generating paper analysis (summary & insights)
+[2026-02-11 13:31:01,800] [INFO] ResearchBrain :: Ingestion complete (persisted + analyzed)
+[2026-02-11 13:35:55,631] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:36:15,184] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:36:34,245] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:36:34,247] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 13:36:55,506] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 13:36:55,506] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 13:41:46,490] [INFO] ResearchBrain :: Ingesting paper for the first time
+[2026-02-11 13:41:49,104] [INFO] ResearchBrain :: Generating paper analysis (summary & insights)
+[2026-02-11 13:46:04,478] [WARNING] ResearchBrain :: Parsing failed: list index out of range
+[2026-02-11 13:46:04,486] [INFO] ResearchBrain :: Ingestion complete (persisted + analyzed)
+[2026-02-11 13:55:41,077] [INFO] ResearchBrain :: Ingesting paper for the first time
+[2026-02-11 13:55:49,494] [INFO] ResearchBrain :: Generating paper analysis (summary & insights)
+[2026-02-11 13:58:16,206] [WARNING] ResearchBrain :: Parsing failed: list index out of range
+[2026-02-11 13:58:16,213] [INFO] ResearchBrain :: Ingestion complete (persisted + analyzed)
+[2026-02-11 14:00:47,949] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 14:00:47,949] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 14:00:48,245] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 14:00:48,248] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 14:00:48,586] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 14:00:48,587] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 14:02:15,988] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 14:02:15,988] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-11 14:02:21,222] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 14:02:47,707] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 14:03:28,995] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 14:04:04,025] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-11 14:05:52,832] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-17 11:23:57,316] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-17 11:24:47,787] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-17 11:25:10,679] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-17 11:25:26,802] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-17 11:25:56,909] [INFO] ResearchBrain :: Loaded paper from storage
+[2026-02-17 11:25:56,909] [INFO] ResearchBrain :: Paper already ingested, loaded from storage
+[2026-02-17 11:26:29,509] [INFO] ResearchBrain :: Loaded paper from storage

@@ -1,0 +1,65 @@
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+python-multipart
+requests
+ollama
+Pillow
+sqlalchemy
+aiosqlite
+pypdf
+python-docx
+python-dotenv
+huggingface_hub
+openai
+transformers
+aiohttp
+docx2txt
+pdf2image
+# =========================
+# Core API & Server
+# =========================
+fastapi
+uvicorn
+python-multipart
+pydantic
+
+# =========================
+# Document & PDF Processing
+# =========================
+pypdf
+pdfplumber
+python-docx
+docx
+
+# =========================
+# Embeddings & Vector Search (Free / Local)
+# =========================
+sentence-transformers
+faiss-cpu
+numpy
+
+# =========================
+# Database
+# =========================
+sqlalchemy
+
+# =========================
+# Frontend
+# =========================
+streamlit
+
+# =========================
+# Configuration & Utilities
+# =========================
+python-dotenv
+
+# =========================
+# Multi-Modal & Async
+# =========================
+networkx
+Pillow
+pytesseract
+celery
+redis
