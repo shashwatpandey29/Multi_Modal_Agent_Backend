@@ -1,13 +1,12 @@
-import ollama
+from agents.llm_provider import chat_completion
 
 def generate_code(prompt: str):
     """
-    Generates code using local Ollama model.
+    Generates code using the provider selected in .env (OpenAI/ChatGPT, Gemini, OpenRouter, or Ollama).
     """
 
     try:
-        response = ollama.chat(
-            model="nemotron-3-nano:30b-cloud",  # change if you use different model
+        return chat_completion(
             messages=[
                 {
                     "role": "system",
@@ -17,10 +16,9 @@ def generate_code(prompt: str):
                     "role": "user",
                     "content": prompt
                 }
-            ]
+            ],
+            use_case="code",
         )
-
-        return response["message"]["content"]
 
     except Exception as e:
         return f"Error generating code: {str(e)}"

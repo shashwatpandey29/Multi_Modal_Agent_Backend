@@ -1,14 +1,16 @@
-import ollama
+from agents.llm_provider import chat_completion
+
+
 async def generate_text(prompt: str):
     try:
-        response = ollama.chat(
-            model="nemotron-3-nano:30b-cloud",
-            messages=[{"role": "user", "content": prompt}]
+        response_text = chat_completion(
+            messages=[{"role": "user", "content": prompt}],
+            use_case="chat",
         )
 
         return {
             "status": "success",
-            "response": response["message"]["content"]
+            "response": response_text
         }
 
     except Exception as e:
