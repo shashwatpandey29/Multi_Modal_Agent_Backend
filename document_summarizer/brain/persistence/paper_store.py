@@ -42,6 +42,13 @@ def load_chunks(paper_id: int):
     return chunks
 
 
+def count_chunks(paper_id: int):
+    db = SessionLocal()
+    count = db.query(Chunk).filter(Chunk.paper_id == paper_id).count()
+    db.close()
+    return count
+
+
 def list_papers():
     db = SessionLocal()
     papers = db.query(Paper).all()

@@ -145,6 +145,20 @@ def chat_completion(messages: List[Message], use_case: str = "chat") -> str:
             os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini"),
         )
         ollama_model = os.getenv("CODER_MODEL", "codellama:latest")
+    elif use_case == "analysis":
+        openai_model = os.getenv(
+            "OPENAI_ANALYSIS_MODEL",
+            os.getenv("OPENAI_CHAT_MODEL", os.getenv("OPENAI_MODEL", "gpt-4o-mini")),
+        )
+        gemini_model = os.getenv(
+            "GEMINI_ANALYSIS_MODEL",
+            os.getenv("GEMINI_CHAT_MODEL", os.getenv("GEMINI_MODEL", "gemini-1.5-flash")),
+        )
+        openrouter_model = os.getenv(
+            "OPENROUTER_ANALYSIS_MODEL",
+            os.getenv("OPENROUTER_CHAT_MODEL", os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")),
+        )
+        ollama_model = os.getenv("ANALYSIS_MODEL", os.getenv("SUMMARIZER_MODEL", "llama3:latest"))
     else:
         openai_model = os.getenv("OPENAI_CHAT_MODEL", os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
         gemini_model = os.getenv("GEMINI_CHAT_MODEL", os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))

@@ -12,4 +12,9 @@ class VectorStore:
 
     def search(self, query_embedding, k):
         _, idx = self.index.search(query_embedding.reshape(1, -1), k)
-        return [self.texts[i] for i in idx[0]]
+        results = []
+        for i in idx[0]:
+            if i < 0 or i >= len(self.texts):
+                continue
+            results.append(self.texts[i])
+        return results

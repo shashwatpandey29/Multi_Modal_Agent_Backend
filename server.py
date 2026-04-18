@@ -23,6 +23,7 @@ app = FastAPI(
 
 origins = [
     "http://localhost:5173",     # React dev server
+    "http://127.0.0.1:5173",
     "http://127.0.0.1:3000",
     "https://z8g765mn-8000.inc1.devtunnels.ms",
     "https://z8g765mn-5173.inc1.devtunnels.ms",

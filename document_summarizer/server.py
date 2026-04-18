@@ -1,18 +1,20 @@
 # server.py
 import os
 import shutil
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from brain.brain import ResearchBrain
-from brain.config import TOP_K
-from brain.persistence.analysis_store import get_analysis
-from brain.persistence.paper_store import list_papers, load_chunks
-from brain.persistence.qa_store import get_all_questions
+from document_summarizer.brain.brain import ResearchBrain
+from document_summarizer.brain.config import TOP_K
+from document_summarizer.brain.persistence.analysis_store import get_analysis
+from document_summarizer.brain.persistence.paper_store import list_papers, count_chunks
+from document_summarizer.brain.persistence.qa_store import count_questions
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+DOCSUM_INTERNAL_TOKEN = os.getenv("DOCSUM_INTERNAL_TOKEN", "").strip()
 
 app = FastAPI(title="AI Research Paper Analyzer API")
 
@@ -22,6 +24,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def verify_internal_token(request: Request, call_next):
+    if request.url.path in {"/", "/health"}:
+        return await call_next(request)
+
+    if DOCSUM_INTERNAL_TOKEN:
+        token = request.headers.get("X-Internal-Token", "")
+        if token != DOCSUM_INTERNAL_TOKEN:
+            return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+
+    return await call_next(request)
 
 
 # ---------- Schemas ----------
@@ -43,6 +58,11 @@ def get_brain():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/")
+def root():
+    return {"status": "running", "service": "document-summarizer"}
 
 
 # ---------- Upload ----------
@@ -109,11 +129,23 @@ def ask_paper(req: AskRequest):
 # ---------- Summary ----------
 @app.get("/summary/{paper_id}")
 def get_summary(paper_id: int):
-    brain = get_brain()
-
     try:
-        brain.load(paper_id)
-        return {"summary": brain.summarize()}
+        analysis = get_analysis(paper_id)
+        if not analysis:
+            raise HTTPException(status_code=404, detail="Summary not available")
+
+        fact_points = []
+        for raw_line in (analysis.key_learnings or "").splitlines():
+            point = raw_line.strip().lstrip("-*").strip()
+            if point:
+                fact_points.append(point)
+
+        return {
+            "summary": analysis.summary,
+            "fact_points": fact_points,
+            "analysis_time_sec": analysis.analysis_time_sec,
+            "precomputed": True,
+        }
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -160,12 +192,12 @@ def get_analysis_api(paper_id: int):
 @app.get("/stats/{paper_id}")
 def get_stats(paper_id: int):
     try:
-        chunks = load_chunks(paper_id) or []
-        questions = get_all_questions(paper_id) or []
+        total_chunks = count_chunks(paper_id)
+        total_questions = count_questions(paper_id)
 
         return {
-            "total_chunks": len(chunks),
-            "total_questions": len(questions)
+            "total_chunks": total_chunks,
+            "total_questions": total_questions
         }
 
     except Exception as e:

@@ -1,9 +1,10 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import Dict, Any
+from typing import Any, Dict
 import os
 import shutil
+import requests
 
 # ----------------------------
 # AI Agents
@@ -13,13 +14,12 @@ from agents.coder import generate_code
 from agents.chat import generate_text
 
 # ----------------------------
-# Research Brain Imports
+# Document Summarizer Proxy Config
 # ----------------------------
-from document_summarizer.brain.brain import ResearchBrain
-from document_summarizer.brain.config import TOP_K
-from document_summarizer.brain.persistence.analysis_store import get_analysis
-from document_summarizer.brain.persistence.paper_store import list_papers, load_chunks
-from document_summarizer.brain.persistence.qa_store import get_all_questions
+DOCSUM_API_BASE_URL = os.getenv("DOCSUM_API_BASE_URL", "").strip().rstrip("/")
+DOCSUM_INTERNAL_TOKEN = os.getenv("DOCSUM_INTERNAL_TOKEN", "").strip()
+DOCSUM_TIMEOUT_SEC = int(os.getenv("DOCSUM_TIMEOUT_SEC", "180"))
+DOCSUM_PROXY_ONLY = os.getenv("DOCSUM_PROXY_ONLY", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 
 router = APIRouter(
@@ -48,7 +48,103 @@ class SearchRequest(BaseModel):
     query: str
 
 
-def get_brain():
+def _use_docsum_proxy() -> bool:
+    return bool(DOCSUM_API_BASE_URL)
+
+
+def _ensure_docsum_mode():
+    if DOCSUM_PROXY_ONLY and not _use_docsum_proxy():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "DOCSUM proxy-only mode is enabled, but DOCSUM_API_BASE_URL is not set. "
+                "Set DOCSUM_API_BASE_URL to the deployed document summarizer service URL."
+            ),
+        )
+
+
+def _docsum_headers() -> Dict[str, str]:
+    headers: Dict[str, str] = {}
+    if DOCSUM_INTERNAL_TOKEN:
+        headers["X-Internal-Token"] = DOCSUM_INTERNAL_TOKEN
+    return headers
+
+
+def _docsum_url(path: str) -> str:
+    return f"{DOCSUM_API_BASE_URL}{path}"
+
+
+def _raise_proxy_error(response: requests.Response):
+    detail: Any = response.text or "Document summarizer service error"
+    try:
+        payload = response.json()
+        detail = payload.get("detail", payload)
+    except ValueError:
+        pass
+
+    raise HTTPException(status_code=response.status_code, detail=detail)
+
+
+def _proxy_get(path: str):
+    try:
+        response = requests.get(
+            _docsum_url(path),
+            headers=_docsum_headers(),
+            timeout=DOCSUM_TIMEOUT_SEC,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Doc summarizer unavailable: {exc}")
+
+    if response.status_code >= 400:
+        _raise_proxy_error(response)
+
+    return response.json()
+
+
+def _proxy_post_json(path: str, data: Dict[str, Any]):
+    try:
+        response = requests.post(
+            _docsum_url(path),
+            json=data,
+            headers=_docsum_headers(),
+            timeout=DOCSUM_TIMEOUT_SEC,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Doc summarizer unavailable: {exc}")
+
+    if response.status_code >= 400:
+        _raise_proxy_error(response)
+
+    return response.json()
+
+
+def _proxy_upload(file: UploadFile):
+    try:
+        file.file.seek(0)
+        response = requests.post(
+            _docsum_url("/upload"),
+            files={
+                "file": (
+                    file.filename,
+                    file.file,
+                    file.content_type or "application/octet-stream",
+                )
+            },
+            headers=_docsum_headers(),
+            timeout=DOCSUM_TIMEOUT_SEC,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Doc summarizer unavailable: {exc}")
+
+    if response.status_code >= 400:
+        _raise_proxy_error(response)
+
+    return response.json()
+
+
+def _get_local_brain():
+    from document_summarizer.brain.brain import ResearchBrain
+
     return ResearchBrain()
 
 
@@ -103,7 +199,12 @@ async def text_route(request: PromptRequest):
 # ---------- Upload ----------
 @router.post("/upload")
 def upload_paper(file: UploadFile = File(...)):
-    brain = get_brain()
+    _ensure_docsum_mode()
+
+    if _use_docsum_proxy():
+        return _proxy_upload(file)
+
+    brain = _get_local_brain()
 
     try:
         filename = file.filename
@@ -137,6 +238,13 @@ def upload_paper(file: UploadFile = File(...)):
 # ---------- List Papers ----------
 @router.get("/papers")
 def get_papers():
+    _ensure_docsum_mode()
+
+    if _use_docsum_proxy():
+        return _proxy_get("/papers")
+
+    from document_summarizer.brain.persistence.paper_store import list_papers
+
     papers = list_papers()
 
     return [
@@ -152,7 +260,15 @@ def get_papers():
 # ---------- Ask ----------
 @router.post("/ask")
 def ask_paper(req: AskRequest):
-    brain = get_brain()
+    _ensure_docsum_mode()
+
+    if _use_docsum_proxy():
+        return _proxy_post_json(
+            "/ask",
+            {"paper_id": req.paper_id, "question": req.question},
+        )
+
+    brain = _get_local_brain()
 
     try:
         brain.load(req.paper_id)
@@ -165,11 +281,33 @@ def ask_paper(req: AskRequest):
 # ---------- Summary ----------
 @router.get("/summary/{paper_id}")
 def get_summary(paper_id: int):
-    brain = get_brain()
+    _ensure_docsum_mode()
+
+    if _use_docsum_proxy():
+        return _proxy_get(f"/summary/{paper_id}")
 
     try:
-        brain.load(paper_id)
-        return {"summary": brain.summarize()}
+        from document_summarizer.brain.persistence.analysis_store import get_analysis
+
+        analysis = get_analysis(paper_id)
+        if not analysis:
+            raise HTTPException(status_code=404, detail="Summary not available")
+
+        fact_points = []
+        for raw_line in (analysis.key_learnings or "").splitlines():
+            point = raw_line.strip().lstrip("-*").strip()
+            if point:
+                fact_points.append(point)
+
+        return {
+            "summary": analysis.summary,
+            "fact_points": fact_points,
+            "analysis_time_sec": analysis.analysis_time_sec,
+            "precomputed": True,
+        }
+
+    except HTTPException as e:
+        raise e
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -178,7 +316,12 @@ def get_summary(paper_id: int):
 # ---------- Teacher ----------
 @router.get("/teach/{paper_id}")
 def teach_paper(paper_id: int):
-    brain = get_brain()
+    _ensure_docsum_mode()
+
+    if _use_docsum_proxy():
+        return _proxy_get(f"/teach/{paper_id}")
+
+    brain = _get_local_brain()
 
     try:
         brain.load(paper_id)
@@ -191,7 +334,14 @@ def teach_paper(paper_id: int):
 # ---------- Analysis ----------
 @router.get("/analysis/{paper_id}")
 def get_analysis_api(paper_id: int):
+    _ensure_docsum_mode()
+
+    if _use_docsum_proxy():
+        return _proxy_get(f"/analysis/{paper_id}")
+
     try:
+        from document_summarizer.brain.persistence.analysis_store import get_analysis
+
         analysis = get_analysis(paper_id)
 
         if not analysis:
@@ -215,13 +365,21 @@ def get_analysis_api(paper_id: int):
 # ---------- Stats ----------
 @router.get("/stats/{paper_id}")
 def get_stats(paper_id: int):
+    _ensure_docsum_mode()
+
+    if _use_docsum_proxy():
+        return _proxy_get(f"/stats/{paper_id}")
+
     try:
-        chunks = load_chunks(paper_id) or []
-        questions = get_all_questions(paper_id) or []
+        from document_summarizer.brain.persistence.paper_store import count_chunks
+        from document_summarizer.brain.persistence.qa_store import count_questions
+
+        total_chunks = count_chunks(paper_id)
+        total_questions = count_questions(paper_id)
 
         return {
-            "total_chunks": len(chunks),
-            "total_questions": len(questions)
+            "total_chunks": total_chunks,
+            "total_questions": total_questions
         }
 
     except Exception as e:
@@ -231,9 +389,19 @@ def get_stats(paper_id: int):
 # ---------- Search ----------
 @router.post("/search")
 def search(req: SearchRequest):
-    brain = get_brain()
+    _ensure_docsum_mode()
+
+    if _use_docsum_proxy():
+        return _proxy_post_json(
+            "/search",
+            {"paper_id": req.paper_id, "query": req.query},
+        )
+
+    brain = _get_local_brain()
 
     try:
+        from document_summarizer.brain.config import TOP_K
+
         brain.load(req.paper_id)
 
         if not brain.retriever:
