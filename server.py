@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -21,19 +23,41 @@ app = FastAPI(
 # CORS Configuration (IMPORTANT for React)
 # ---------------------------------------
 
-origins = [
-    "http://localhost:5173",     # React dev server
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:3000",
-    "https://z8g765mn-8000.inc1.devtunnels.ms",
-    "https://z8g765mn-5173.inc1.devtunnels.ms",
-    # Add your production frontend URL later
-    # "https://yourdomain.com"
-]
+def _build_cors_origins() -> list[str]:
+    default_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+        "https://z8g765mn-8000.inc1.devtunnels.ms",
+        "https://z8g765mn-5173.inc1.devtunnels.ms",
+        "https://multi-modal-agent-frontend-a5gy.vercel.app",
+    ]
+
+    raw_env_origins = os.getenv("CORS_ALLOW_ORIGINS", "").strip()
+    if not raw_env_origins:
+        return default_origins
+
+    env_origins = [origin.strip() for origin in raw_env_origins.split(",") if origin.strip()]
+    merged = default_origins + env_origins
+
+    # Keep order stable while removing duplicates.
+    unique = []
+    seen = set()
+    for origin in merged:
+        if origin not in seen:
+            seen.add(origin)
+            unique.append(origin)
+
+    return unique
+
+
+origins = _build_cors_origins()
+origin_regex = os.getenv("CORS_ALLOW_ORIGIN_REGEX", r"https://.*\.vercel\.app")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,      # Or ["*"] during development
+    allow_origins=origins,
+    allow_origin_regex=origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
