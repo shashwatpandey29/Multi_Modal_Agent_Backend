@@ -208,9 +208,24 @@ class ResearchBrain:
             store.add(embeddings, texts)
             save_index(store.index, self.paper_id)
         else:
-            store = VectorStore(index.d)
-            store.index = index
-            store.texts = texts
+            sample_vector = self.embedder.embed([texts[0]])
+            current_dim = int(sample_vector.shape[1]) if sample_vector.ndim == 2 else int(sample_vector.shape[0])
+
+            if index.d != current_dim:
+                self.logger.warning(
+                    "Embedding dimension changed (index=%s, provider=%s). Rebuilding index.",
+                    index.d,
+                    current_dim,
+                )
+
+                embeddings = self.embedder.embed(texts)
+                store = VectorStore(embeddings.shape[1])
+                store.add(embeddings, texts)
+                save_index(store.index, self.paper_id)
+            else:
+                store = VectorStore(index.d)
+                store.index = index
+                store.texts = texts
 
         self.retriever = Retriever(self.embedder, store)
         _set_cached_retriever(self.paper_id, self.retriever)

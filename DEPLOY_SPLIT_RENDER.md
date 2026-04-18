@@ -38,7 +38,7 @@ DOCSUM_PROXY_ONLY=true
 - Build Command:
 
 ```bash
-pip install -r requirements.txt
+pip install -r document_summarizer/requirements.txt
 ```
 
 - Start Command:
@@ -55,6 +55,8 @@ OPENAI_API_KEY=...
 GOOGLE_API_KEY=...
 OPENROUTER_API_KEY=...
 DOCSUM_INTERNAL_TOKEN=<same-secret-as-core-service>
+EMBEDDING_PROVIDER=openai
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 ```
 
 ## 3) Frontend
@@ -76,5 +78,7 @@ Do not call docsum service directly from frontend.
 ```http
 X-Internal-Token: <token>
 ```
+
+- Free-tier memory tip: keep `EMBEDDING_PROVIDER=openai` for doc service to avoid loading torch/sentence-transformers at runtime.
 
 - Rotate API keys before production deployment.

@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+pydantic
+python-multipart
+requests
+python-dotenv
+openai
+numpy
+faiss-cpu
+sqlalchemy
+aiosqlite
+pdfplumber
+pypdf
+python-docx
+docx2txt

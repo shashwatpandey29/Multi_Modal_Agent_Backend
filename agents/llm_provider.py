@@ -1,7 +1,6 @@
 import os
 from typing import Dict, List
 
-import ollama
 import requests
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -128,6 +127,13 @@ def _gemini_chat_completion(messages: List[Message], model: str, temperature: fl
 
 
 def _ollama_chat_completion(messages: List[Message], model: str) -> str:
+    try:
+        import ollama
+    except ImportError as exc:
+        raise RuntimeError(
+            "ollama package is not installed. Install ollama or switch LLM_PROVIDER to openai/gemini/openrouter"
+        ) from exc
+
     response = ollama.chat(model=model, messages=messages)
     return response["message"]["content"].strip()
 
