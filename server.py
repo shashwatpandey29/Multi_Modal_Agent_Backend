@@ -1,6 +1,6 @@
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -90,6 +90,11 @@ async def health_check():
         status_code=200,
         content={"status": "healthy"}
     )
+
+
+@app.head("/health", include_in_schema=False)
+async def health_check_head() -> Response:
+    return Response(status_code=200)
 
 # ---------------------------------------
 # Run Server

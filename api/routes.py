@@ -1,7 +1,13 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
-from typing import Any, Dict
+import base64
+import binascii
+import re
+from uuid import uuid4
+
+from fastapi import APIRouter, HTTPException, UploadFile, File, Header, Response
+from fastapi.responses import FileResponse, StreamingResponse
+from pydantic import BaseModel, Field
+from typing import Any, Dict, List, Optional
+import json
 import os
 import shutil
 import requests
@@ -11,7 +17,16 @@ import requests
 # ----------------------------
 from agents.image_generator import generate_image_and_video
 from agents.coder import generate_code
-from agents.chat import generate_text
+from agents.chat import generate_text, stream_text
+from agents.llm_provider import get_llm_provider, list_openrouter_free_models
+from agents.memory import (
+    clear_memory_session,
+    export_knowledge_bridge,
+    get_memory_snapshot,
+    get_session_mode,
+    import_knowledge_bridge,
+    set_session_mode,
+)
 
 # ----------------------------
 # Document Summarizer Proxy Config
@@ -20,6 +35,23 @@ DOCSUM_API_BASE_URL = os.getenv("DOCSUM_API_BASE_URL", "").strip().rstrip("/")
 DOCSUM_INTERNAL_TOKEN = os.getenv("DOCSUM_INTERNAL_TOKEN", "").strip()
 DOCSUM_TIMEOUT_SEC = int(os.getenv("DOCSUM_TIMEOUT_SEC", "180"))
 DOCSUM_PROXY_ONLY = os.getenv("DOCSUM_PROXY_ONLY", "false").strip().lower() in {"1", "true", "yes", "on"}
+JUDGE0_URL = os.getenv("JUDGE0_URL", "https://ce.judge0.com/submissions?base64_encoded=true&wait=true").strip()
+JUDGE0_RAPIDAPI_KEY = os.getenv("JUDGE0_RAPIDAPI_KEY", "").strip()
+JUDGE0_RAPIDAPI_HOST = os.getenv("JUDGE0_RAPIDAPI_HOST", "").strip()
+PISTON_URL = os.getenv("PISTON_URL", "https://emkc.org/api/v2/piston/execute").strip()
+EXECUTION_TIMEOUT_SEC = int(os.getenv("EXECUTION_TIMEOUT_SEC", "25"))
+
+PISTON_RUNTIME_BY_LANGUAGE_ID: Dict[int, Dict[str, str]] = {
+    50: {"language": "c", "version": "10.2.0"},
+    54: {"language": "cpp", "version": "10.2.0"},
+    60: {"language": "go", "version": "1.16.2"},
+    62: {"language": "java", "version": "15.0.2"},
+    63: {"language": "javascript", "version": "18.15.0"},
+    71: {"language": "python", "version": "3.10.0"},
+    73: {"language": "rust", "version": "1.68.2"},
+}
+
+_REQUEST_ID_SANITIZER = re.compile(r"[^A-Za-z0-9._:-]+")
 
 
 router = APIRouter(
@@ -38,6 +70,36 @@ class PromptRequest(BaseModel):
     prompt: str
 
 
+class TextRequest(BaseModel):
+    prompt: str
+    model: Optional[str] = None
+    session_id: Optional[str] = None
+    session_mode: Optional[str] = None
+    response_length: Optional[str] = None
+
+
+class SessionModeRequest(BaseModel):
+    mode: str
+
+
+class MemoryBridgeExportRequest(BaseModel):
+    source_session_id: str
+    source_mode: Optional[str] = None
+    fact_ids: Optional[List[int]] = None
+    node_ids: Optional[List[int]] = None
+    edge_ids: Optional[List[int]] = None
+    message_ids: Optional[List[int]] = None
+
+
+class MemoryBridgeImportRequest(BaseModel):
+    target_session_id: str
+    target_mode: Optional[str] = None
+    payload: Dict[str, Any]
+    include_messages: bool = True
+    include_facts: bool = True
+    include_graph: bool = True
+
+
 class AskRequest(BaseModel):
     paper_id: int
     question: str
@@ -46,6 +108,14 @@ class AskRequest(BaseModel):
 class SearchRequest(BaseModel):
     paper_id: int
     query: str
+
+
+class ExecuteRequest(BaseModel):
+    language_id: int = Field(gt=0)
+    source_code: str = Field(min_length=1, max_length=120_000)
+    stdin: str = Field(default="", max_length=20_000)
+    cpu_time_limit: float = Field(default=10, gt=0, le=20)
+    memory_limit: int = Field(default=128_000, ge=16_000, le=256_000)
 
 
 def _use_docsum_proxy() -> bool:
@@ -142,6 +212,135 @@ def _proxy_upload(file: UploadFile):
     return response.json()
 
 
+def _decode_base64_utf8(value: str) -> str:
+    if not value:
+        return ""
+
+
+def _resolve_request_id(incoming_request_id: Optional[str]) -> str:
+    cleaned = _REQUEST_ID_SANITIZER.sub("-", (incoming_request_id or "").strip())
+    cleaned = cleaned.strip("-")[:64]
+    if cleaned:
+        return cleaned
+    return uuid4().hex
+
+    normalized = value.strip()
+    missing_padding = len(normalized) % 4
+    if missing_padding:
+        normalized += "=" * (4 - missing_padding)
+
+    try:
+        return base64.b64decode(normalized).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError):
+        return ""
+
+
+def _judge0_headers() -> Dict[str, str]:
+    headers: Dict[str, str] = {"Content-Type": "application/json"}
+
+    if JUDGE0_RAPIDAPI_KEY:
+        headers["X-RapidAPI-Key"] = JUDGE0_RAPIDAPI_KEY
+    if JUDGE0_RAPIDAPI_HOST:
+        headers["X-RapidAPI-Host"] = JUDGE0_RAPIDAPI_HOST
+
+    return headers
+
+
+def _normalize_judge0_result(payload: Dict[str, Any]) -> Dict[str, Any]:
+    stdout = _decode_base64_utf8(str(payload.get("stdout") or ""))
+    stderr = _decode_base64_utf8(str(payload.get("stderr") or ""))
+    compile_output = _decode_base64_utf8(str(payload.get("compile_output") or ""))
+    message = _decode_base64_utf8(str(payload.get("message") or ""))
+
+    status_payload = payload.get("status") if isinstance(payload.get("status"), dict) else {}
+    status_id_raw = status_payload.get("id") if isinstance(status_payload, dict) else None
+
+    try:
+        status_id = int(status_id_raw) if status_id_raw is not None else 0
+    except (TypeError, ValueError):
+        status_id = 0
+
+    exit_code_raw = payload.get("exit_code")
+    try:
+        exit_code = int(exit_code_raw) if exit_code_raw is not None else (1 if status_id >= 6 else 0)
+    except (TypeError, ValueError):
+        exit_code = 1 if status_id >= 6 else 0
+
+    time_raw = payload.get("time")
+    try:
+        time_ms = float(time_raw) * 1000
+    except (TypeError, ValueError):
+        time_ms = 0.0
+
+    stderr_parts = [part for part in [stderr, compile_output, message] if part]
+
+    normalized: Dict[str, Any] = {
+        "provider": "judge0",
+        "stdout": stdout,
+        "stderr": "\n".join(stderr_parts),
+        "exitCode": exit_code,
+        "timeMs": round(time_ms, 2),
+    }
+
+    if isinstance(payload.get("memory"), (int, float)):
+        normalized["memoryKb"] = int(payload["memory"])
+
+    return normalized
+
+
+def _run_with_piston(payload: ExecuteRequest) -> Dict[str, Any]:
+    runtime = PISTON_RUNTIME_BY_LANGUAGE_ID.get(payload.language_id)
+    if not runtime:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "execution_not_configured",
+                "message": "No fallback runtime is configured for the selected language.",
+            },
+        )
+
+    source_code = _decode_base64_utf8(payload.source_code)
+
+    try:
+        response = requests.post(
+            PISTON_URL,
+            json={
+                "language": runtime["language"],
+                "version": runtime["version"],
+                "files": [{"name": "main", "content": source_code}],
+                "stdin": payload.stdin,
+                "run_timeout": int(payload.cpu_time_limit * 1000),
+            },
+            timeout=EXECUTION_TIMEOUT_SEC,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Piston execution failed: {exc}")
+
+    if response.status_code >= 400:
+        detail = response.text or "Piston returned an error"
+        raise HTTPException(status_code=502, detail=f"Piston execution failed: {detail}")
+
+    data = response.json()
+    compile_stdout = str(data.get("compile", {}).get("stdout") or "")
+    compile_stderr = str(data.get("compile", {}).get("stderr") or "")
+    run_stdout = str(data.get("run", {}).get("stdout") or "")
+    run_stderr = str(data.get("run", {}).get("stderr") or "")
+    code_raw = data.get("run", {}).get("code")
+
+    try:
+        exit_code = int(code_raw) if code_raw is not None else (1 if (compile_stderr or run_stderr) else 0)
+    except (TypeError, ValueError):
+        exit_code = 1 if (compile_stderr or run_stderr) else 0
+
+    return {
+        "provider": "piston",
+        "stdout": "\n".join(part for part in [compile_stdout, run_stdout] if part),
+        "stderr": "\n".join(part for part in [compile_stderr, run_stderr] if part),
+        "exitCode": exit_code,
+        "timeMs": 0,
+    }
+
+
 def _get_local_brain():
     from document_summarizer.brain.brain import ResearchBrain
 
@@ -181,15 +380,191 @@ async def code_route(request: PromptRequest):
     }
 
 
-@router.post("/generate-text")
-async def text_route(request: PromptRequest):
+@router.post("/execute")
+def execute_code(request: ExecuteRequest):
+    if "rapidapi.com" in JUDGE0_URL.lower() and not JUDGE0_RAPIDAPI_KEY:
+        return _run_with_piston(request)
 
-    result = await generate_text(request.prompt)
+    payload = request.model_dump()
+
+    try:
+        response = requests.post(
+            JUDGE0_URL,
+            json=payload,
+            headers=_judge0_headers(),
+            timeout=EXECUTION_TIMEOUT_SEC,
+        )
+    except requests.RequestException:
+        return _run_with_piston(request)
+
+    if response.status_code >= 400:
+        try:
+            return _run_with_piston(request)
+        except HTTPException as fallback_error:
+            detail = response.text or "Judge0 request failed"
+            raise HTTPException(status_code=response.status_code, detail={"judge0": detail, "fallback": fallback_error.detail})
+
+    try:
+        result = response.json()
+    except ValueError:
+        return _run_with_piston(request)
+
+    return _normalize_judge0_result(result)
+
+
+@router.post("/generate-text")
+async def text_route(
+    request: TextRequest,
+    response: Response,
+    x_request_id: Optional[str] = Header(default=None, alias="X-Request-ID"),
+):
+    request_id = _resolve_request_id(x_request_id)
+
+    result = await generate_text(
+        request.prompt,
+        model=request.model,
+        session_id=request.session_id,
+        session_mode=request.session_mode,
+        response_length=request.response_length,
+        request_id=request_id,
+    )
 
     if result.get("status") == "error":
         raise HTTPException(status_code=500, detail=result["message"])
 
+    response.headers["X-Request-ID"] = request_id
+    result["request_id"] = request_id
     return result
+
+
+@router.post("/generate-text/stream")
+async def text_stream_route(
+    request: TextRequest,
+    x_request_id: Optional[str] = Header(default=None, alias="X-Request-ID"),
+):
+    request_id = _resolve_request_id(x_request_id)
+
+    def event_stream():
+        try:
+            for chunk in stream_text(
+                request.prompt,
+                model=request.model,
+                session_id=request.session_id,
+                session_mode=request.session_mode,
+                response_length=request.response_length,
+                request_id=request_id,
+            ):
+                if not chunk:
+                    continue
+
+                payload = json.dumps({"type": "chunk", "content": chunk}, ensure_ascii=False)
+                yield f"data: {payload}\n\n"
+
+            effective_mode = request.session_mode
+            if not effective_mode and request.session_id:
+                effective_mode = get_session_mode(request.session_id).get("mode")
+
+            done_payload = json.dumps(
+                {
+                    "type": "done",
+                    "session_mode": effective_mode or "persistent",
+                    "request_id": request_id,
+                }
+            )
+            yield f"data: {done_payload}\n\n"
+        except Exception as exc:
+            error_payload = json.dumps(
+                {"type": "error", "message": str(exc), "request_id": request_id},
+                ensure_ascii=False,
+            )
+            yield f"data: {error_payload}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "X-Request-ID": request_id,
+        },
+    )
+
+
+@router.get("/models/openrouter")
+def get_openrouter_free_models():
+    provider = get_llm_provider()
+    default_model = os.getenv(
+        "OPENROUTER_CHAT_MODEL",
+        os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini"),
+    )
+
+    try:
+        models = list_openrouter_free_models()
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch OpenRouter models: {exc}")
+
+    if default_model and all(model.get("id") != default_model for model in models):
+        models.insert(
+            0,
+            {
+                "id": default_model,
+                "name": f"{default_model} (default)",
+            },
+        )
+
+    return {
+        "provider": provider,
+        "enabled": provider == "openrouter",
+        "default_model": default_model,
+        "models": models,
+    }
+
+
+@router.get("/memory/{session_id}")
+def get_nova_memory(session_id: str, mode: Optional[str] = None):
+    return get_memory_snapshot(session_id=session_id, session_mode=mode)
+
+
+@router.delete("/memory/{session_id}")
+def reset_nova_memory(session_id: str, mode: Optional[str] = None):
+    return clear_memory_session(session_id=session_id, session_mode=mode)
+
+
+@router.get("/memory/{session_id}/mode")
+def get_nova_memory_mode(session_id: str):
+    return get_session_mode(session_id=session_id)
+
+
+@router.post("/memory/{session_id}/mode")
+def set_nova_memory_mode(session_id: str, request: SessionModeRequest):
+    return set_session_mode(session_id=session_id, session_mode=request.mode)
+
+
+@router.post("/memory/bridge/export")
+def export_nova_bridge(request: MemoryBridgeExportRequest):
+    return export_knowledge_bridge(
+        source_session_id=request.source_session_id,
+        source_mode=request.source_mode,
+        fact_ids=request.fact_ids,
+        node_ids=request.node_ids,
+        edge_ids=request.edge_ids,
+        message_ids=request.message_ids,
+    )
+
+
+@router.post("/memory/bridge/import")
+def import_nova_bridge(request: MemoryBridgeImportRequest):
+    return import_knowledge_bridge(
+        target_session_id=request.target_session_id,
+        bridge_payload=request.payload,
+        target_mode=request.target_mode,
+        include_messages=request.include_messages,
+        include_facts=request.include_facts,
+        include_graph=request.include_graph,
+    )
 
 
 # ==========================================================
