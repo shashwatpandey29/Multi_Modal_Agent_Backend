@@ -8,6 +8,7 @@ import uvicorn
 
 # Import your router
 from api.routes import router as ai_router
+from api.finance_routes import finance_router
 
 # ---------------------------------------
 # Create FastAPI App
@@ -68,6 +69,7 @@ app.add_middleware(
 # ---------------------------------------
 
 app.include_router(ai_router)
+app.include_router(finance_router)
 
 # ---------------------------------------
 # Root Route

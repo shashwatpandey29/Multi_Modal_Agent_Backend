@@ -215,6 +215,22 @@ def _proxy_upload(file: UploadFile):
 def _decode_base64_utf8(value: str) -> str:
     if not value:
         return ""
+    normalized = value.strip()
+    missing_padding = len(normalized) % 4
+    if missing_padding:
+        normalized += "=" * (4 - missing_padding)
+
+    try:
+        return base64.b64decode(normalized, validate=True).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError):
+        # Some providers return plain UTF-8 text already.
+        return value
+
+
+def _encode_base64_utf8(value: str) -> str:
+    if not value:
+        return ""
+    return base64.b64encode(value.encode("utf-8")).decode("utf-8")
 
 
 def _resolve_request_id(incoming_request_id: Optional[str]) -> str:
@@ -223,16 +239,6 @@ def _resolve_request_id(incoming_request_id: Optional[str]) -> str:
     if cleaned:
         return cleaned
     return uuid4().hex
-
-    normalized = value.strip()
-    missing_padding = len(normalized) % 4
-    if missing_padding:
-        normalized += "=" * (4 - missing_padding)
-
-    try:
-        return base64.b64decode(normalized).decode("utf-8")
-    except (binascii.Error, UnicodeDecodeError):
-        return ""
 
 
 def _judge0_headers() -> Dict[str, str]:
@@ -386,6 +392,10 @@ def execute_code(request: ExecuteRequest):
         return _run_with_piston(request)
 
     payload = request.model_dump()
+
+    # Judge0 expects stdin to be base64 when base64_encoded=true is set.
+    if "base64_encoded=true" in JUDGE0_URL.lower():
+        payload["stdin"] = _encode_base64_utf8(request.stdin)
 
     try:
         response = requests.post(
