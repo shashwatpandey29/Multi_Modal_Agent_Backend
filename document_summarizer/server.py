@@ -8,9 +8,11 @@ from pydantic import BaseModel
 
 from document_summarizer.brain.brain import ResearchBrain
 from document_summarizer.brain.config import TOP_K
-from document_summarizer.brain.persistence.analysis_store import get_analysis
-from document_summarizer.brain.persistence.paper_store import list_papers, count_chunks
+from document_summarizer.brain.prompts.analysis import full_analysis_prompt
+from document_summarizer.brain.persistence.analysis_store import get_analysis, save_analysis
+from document_summarizer.brain.persistence.paper_store import list_papers, count_chunks, load_chunks
 from document_summarizer.brain.persistence.qa_store import count_questions
+from document_summarizer.brain.utils.timer import Timer
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -52,6 +54,31 @@ class SearchRequest(BaseModel):
 
 def get_brain():
     return ResearchBrain()
+
+
+def _parse_full_analysis(full_analysis: str):
+    summary = ""
+    key_learnings = ""
+    limitations = ""
+    contributions = ""
+
+    try:
+        summary = full_analysis.split("=== KEY LEARNINGS ===")[0]
+        summary = summary.replace("=== SUMMARY ===", "").strip()
+
+        part2 = full_analysis.split("=== KEY LEARNINGS ===")[1]
+        key_learnings = part2.split("=== MAIN CONTRIBUTIONS ===")[0].strip()
+
+        part3 = part2.split("=== MAIN CONTRIBUTIONS ===")[1]
+        contributions = part3.split("=== LIMITATIONS ===")[0].strip()
+        limitations = part3.split("=== LIMITATIONS ===")[1].strip()
+    except Exception:
+        summary = full_analysis
+        key_learnings = "Parsing failed"
+        contributions = "Parsing failed"
+        limitations = "Parsing failed"
+
+    return summary, key_learnings, limitations, contributions
 
 
 # ---------- Health ----------
@@ -132,7 +159,34 @@ def get_summary(paper_id: int):
     try:
         analysis = get_analysis(paper_id)
         if not analysis:
-            raise HTTPException(status_code=404, detail="Summary not available")
+            brain = get_brain()
+            brain.load(paper_id)
+
+            chunks = load_chunks(paper_id)
+            if not chunks:
+                raise HTTPException(status_code=404, detail="Summary not available")
+
+            all_chunks = [f"[{chunk.section.upper()}]\n{chunk.text}" for chunk in chunks]
+            combined_text = "\n\n".join(all_chunks[:3])[:4000]
+
+            with Timer() as timer:
+                full_analysis = brain.analysis_llm.generate(full_analysis_prompt(combined_text))
+
+            summary, key_learnings, limitations, contributions = _parse_full_analysis(full_analysis)
+            save_analysis(paper_id, summary, key_learnings, limitations, contributions, timer.elapsed)
+
+            fact_points = []
+            for raw_line in key_learnings.splitlines():
+                point = raw_line.strip().lstrip("-*").strip()
+                if point:
+                    fact_points.append(point)
+
+            return {
+                "summary": summary,
+                "fact_points": fact_points,
+                "analysis_time_sec": timer.elapsed,
+                "precomputed": False,
+            }
 
         fact_points = []
         for raw_line in (analysis.key_learnings or "").splitlines():

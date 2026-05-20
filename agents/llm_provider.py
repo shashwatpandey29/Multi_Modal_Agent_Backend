@@ -99,10 +99,7 @@ def _gemini_prompt_from_messages(messages: List[Message]) -> str:
 
 
 def _openai_chat_completion(messages: List[Message], model: str, temperature: float) -> str:
-    client = OpenAI(
-        api_key=os.getenv("NVIDIA_API_KEY", "").strip() or _require_env("OPENAI_API_KEY"),
-        base_url=os.getenv("NVIDIA_API_BASE_URL", "").strip() or os.getenv("OPENAI_BASE_URL", "").strip() or "https://integrate.api.nvidia.com/v1",
-    )
+    client = OpenAI(**_resolve_openai_client_kwargs(model))
 
     if model.startswith(("openai/gpt-oss-", "gpt-oss-")):
         response = client.responses.create(
@@ -188,6 +185,24 @@ def _ollama_chat_completion(messages: List[Message], model: str) -> str:
     return response["message"]["content"].strip()
 
 
+def _resolve_openai_client_kwargs(model: str) -> Dict[str, str]:
+    nvidia_api_key = os.getenv("NVIDIA_API_KEY", "").strip()
+    nvidia_base_url = os.getenv("NVIDIA_API_BASE_URL", "").strip()
+    openai_api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    openai_base_url = os.getenv("OPENAI_BASE_URL", "").strip()
+
+    api_key = nvidia_api_key or openai_api_key or _require_env("OPENAI_API_KEY")
+
+    if model.startswith(("openai/gpt-oss-", "gpt-oss-")):
+        base_url = nvidia_base_url or "https://integrate.api.nvidia.com/v1"
+    elif nvidia_api_key:
+        base_url = nvidia_base_url or "https://integrate.api.nvidia.com/v1"
+    else:
+        base_url = openai_base_url or nvidia_base_url or "https://integrate.api.nvidia.com/v1"
+
+    return {"api_key": api_key, "base_url": base_url}
+
+
 def _stream_text_chunks(text: str) -> Iterator[str]:
     for chunk in re.findall(r"\S+\s*", text):
         if chunk:
@@ -195,10 +210,7 @@ def _stream_text_chunks(text: str) -> Iterator[str]:
 
 
 def _openai_chat_completion_stream(messages: List[Message], model: str, temperature: float) -> Iterator[str]:
-    client = OpenAI(
-        api_key=os.getenv("NVIDIA_API_KEY", "").strip() or _require_env("OPENAI_API_KEY"),
-        base_url=os.getenv("NVIDIA_API_BASE_URL", "").strip() or os.getenv("OPENAI_BASE_URL", "").strip() or "https://integrate.api.nvidia.com/v1",
-    )
+    client = OpenAI(**_resolve_openai_client_kwargs(model))
 
     if model.startswith(("openai/gpt-oss-", "gpt-oss-")):
         response = client.responses.create(
