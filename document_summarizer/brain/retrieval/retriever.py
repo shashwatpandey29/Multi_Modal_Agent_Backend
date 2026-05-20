@@ -4,5 +4,5 @@ class Retriever:
         self.store = store
 
     def retrieve(self, query, k):
-        q_emb = self.embedder.embed([query])[0]
+        q_emb = self.embedder.embed([query], input_type="query")[0]
         return self.store.search(q_emb, k)

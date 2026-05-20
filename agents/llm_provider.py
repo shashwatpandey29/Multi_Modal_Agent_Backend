@@ -99,7 +99,19 @@ def _gemini_prompt_from_messages(messages: List[Message]) -> str:
 
 
 def _openai_chat_completion(messages: List[Message], model: str, temperature: float) -> str:
-    client = OpenAI(api_key=_require_env("OPENAI_API_KEY"))
+    client = OpenAI(
+        api_key=os.getenv("NVIDIA_API_KEY", "").strip() or _require_env("OPENAI_API_KEY"),
+        base_url=os.getenv("NVIDIA_API_BASE_URL", "").strip() or os.getenv("OPENAI_BASE_URL", "").strip() or "https://integrate.api.nvidia.com/v1",
+    )
+
+    if model.startswith(("openai/gpt-oss-", "gpt-oss-")):
+        response = client.responses.create(
+            model=model,
+            input=messages,
+            temperature=temperature,
+        )
+        return (response.output_text or "").strip()
+
     response = client.chat.completions.create(
         model=model,
         messages=messages,
@@ -183,7 +195,21 @@ def _stream_text_chunks(text: str) -> Iterator[str]:
 
 
 def _openai_chat_completion_stream(messages: List[Message], model: str, temperature: float) -> Iterator[str]:
-    client = OpenAI(api_key=_require_env("OPENAI_API_KEY"))
+    client = OpenAI(
+        api_key=os.getenv("NVIDIA_API_KEY", "").strip() or _require_env("OPENAI_API_KEY"),
+        base_url=os.getenv("NVIDIA_API_BASE_URL", "").strip() or os.getenv("OPENAI_BASE_URL", "").strip() or "https://integrate.api.nvidia.com/v1",
+    )
+
+    if model.startswith(("openai/gpt-oss-", "gpt-oss-")):
+        response = client.responses.create(
+            model=model,
+            input=messages,
+            temperature=temperature,
+        )
+
+        yield from _stream_text_chunks((response.output_text or "").strip())
+        return
+
     stream = client.chat.completions.create(
         model=model,
         messages=messages,
@@ -310,7 +336,7 @@ def list_openrouter_free_models() -> List[Dict[str, Any]]:
 
 def _resolve_models_for_use_case(use_case: str) -> Dict[str, str]:
     if use_case == "code":
-        openai_model = os.getenv("OPENAI_CODER_MODEL", os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
+        openai_model = os.getenv("OPENAI_CODER_MODEL", os.getenv("OPENAI_MODEL", "openai/gpt-oss-20b"))
         gemini_model = os.getenv("GEMINI_CODER_MODEL", os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
         openrouter_model = os.getenv(
             "OPENROUTER_CODER_MODEL",
@@ -320,7 +346,7 @@ def _resolve_models_for_use_case(use_case: str) -> Dict[str, str]:
     elif use_case == "analysis":
         openai_model = os.getenv(
             "OPENAI_ANALYSIS_MODEL",
-            os.getenv("OPENAI_CHAT_MODEL", os.getenv("OPENAI_MODEL", "gpt-4o-mini")),
+            os.getenv("OPENAI_CHAT_MODEL", os.getenv("OPENAI_MODEL", "openai/gpt-oss-120b")),
         )
         gemini_model = os.getenv(
             "GEMINI_ANALYSIS_MODEL",
@@ -332,7 +358,7 @@ def _resolve_models_for_use_case(use_case: str) -> Dict[str, str]:
         )
         ollama_model = os.getenv("ANALYSIS_MODEL", os.getenv("SUMMARIZER_MODEL", "llama3:latest"))
     else:
-        openai_model = os.getenv("OPENAI_CHAT_MODEL", os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
+        openai_model = os.getenv("OPENAI_CHAT_MODEL", os.getenv("OPENAI_MODEL", "openai/gpt-oss-20b"))
         gemini_model = os.getenv("GEMINI_CHAT_MODEL", os.getenv("GEMINI_MODEL", "gemini-1.5-flash"))
         openrouter_model = os.getenv(
             "OPENROUTER_CHAT_MODEL",
