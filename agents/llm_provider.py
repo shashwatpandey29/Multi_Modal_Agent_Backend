@@ -5,6 +5,8 @@ from typing import Any, Dict, Iterator, List, Optional
 import requests
 from dotenv import load_dotenv
 from openai import OpenAI
+import concurrent.futures
+import time
 
 load_dotenv()
 
@@ -400,6 +402,46 @@ def chat_completion(
     timeout_sec = _env_int("LLM_TIMEOUT_SEC", 60)
     selected_model = (model_override or "").strip() or None
     models = _resolve_models_for_use_case(use_case)
+
+    def _call_provider():
+        if provider in {"chatgpt", "openai"}:
+            return _openai_chat_completion(
+                messages=messages,
+                model=selected_model or models["openai"],
+                temperature=temperature,
+            )
+
+        if provider == "gemini":
+            return _gemini_chat_completion(
+                messages=messages,
+                model=selected_model or models["gemini"],
+                temperature=temperature,
+                timeout_sec=timeout_sec,
+            )
+
+        if provider == "openrouter":
+            return _openrouter_chat_completion(
+                messages=messages,
+                model=selected_model or models["openrouter"],
+                temperature=temperature,
+            )
+
+        if provider == "ollama":
+            return _ollama_chat_completion(messages=messages, model=selected_model or models["ollama"])
+
+        raise ValueError(
+            "Unsupported LLM_PROVIDER. Use one of: chatgpt, openai, gemini, openrouter, ollama"
+        )
+
+    # run provider call with timeout in thread to avoid blocking indefinitely
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        fut = ex.submit(_call_provider)
+        try:
+            start = time.perf_counter()
+            return fut.result(timeout=timeout_sec)
+        except concurrent.futures.TimeoutError:
+            fut.cancel()
+            raise RuntimeError(f"LLM provider call timed out after {timeout_sec}s")
 
     if provider in {"chatgpt", "openai"}:
         return _openai_chat_completion(

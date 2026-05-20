@@ -1,10 +1,13 @@
 import os
+import re
+import hashlib
 from threading import Lock
 from typing import Dict, List
 
 import numpy as np
 
 from document_summarizer.brain.logger import get_logger
+from document_summarizer import cache
 from document_summarizer.brain.ingestion.section_parser import split_into_sections
 from document_summarizer.brain.ingestion.chunker import chunk_text
 from document_summarizer.brain.ingestion.document_loader import load_document_text
@@ -30,6 +33,9 @@ from document_summarizer.brain.persistence.analysis_store import get_analysis, s
 from document_summarizer.brain.utils.context import trim_context
 from document_summarizer.brain.config import TOP_K
 from document_summarizer.brain.utils.timer import Timer
+
+SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.8"))
+ASYNC_PRECOMPUTE = os.getenv("DOCSUM_ASYNC_PRECOMPUTE", "false").lower() == "true"
 
 
 _RETRIEVER_CACHE: Dict[int, Retriever] = {}
@@ -156,6 +162,30 @@ class ResearchBrain:
             store.add(embeddings, all_chunks)
             save_index(store.index, self.paper_id)
 
+            # Optionally enqueue background precompute job (index already persisted)
+            if ASYNC_PRECOMPUTE:
+                try:
+                    import redis as _redis
+                    from rq import Queue
+
+                    conn = _redis.from_url(os.getenv("CACHE_URL", "redis://localhost:6379/0"))
+                    q = Queue(connection=conn)
+                    q.enqueue("document_summarizer.worker.precompute_analysis", self.paper_id)
+                    self.logger.info("Enqueued async precompute for paper %s", self.paper_id)
+
+                    # still set retriever for immediate queries
+                    self.retriever = Retriever(self.embedder, store)
+                    _set_cached_retriever(self.paper_id, self.retriever)
+
+                    return {
+                        "paper_id": self.paper_id,
+                        "analysis_time_sec": 0,
+                        "cached": False,
+                        "queued": True,
+                    }
+                except Exception as exc:
+                    self.logger.error("Failed to enqueue precompute job: %s", exc)
+
             self.logger.info("Generating precomputed summary and fact points")
             with Timer() as timer:
                 try:
@@ -255,13 +285,34 @@ class ResearchBrain:
         if not self.retriever:
             raise RuntimeError("Paper not ingested")
 
-        exact = get_exact_answer(self.paper_id, question)
-        if exact:
+        # Normalize question for caching and exact-match checks
+        norm_q = re.sub(r"\s+", " ", question.strip().lower())
+        cache_key = cache.make_key("ask", self.paper_id, cache.hash_text(norm_q))
+
+        # Check Redis cache first
+        cached = cache.get(cache_key)
+        if cached:
             return {
-                "answer": exact.answer,
-                "response_time_sec": 0.01,
+                "answer": cached.get("answer"),
+                "response_time_sec": cached.get("response_time_sec", 0.01),
                 "cached": True,
             }
+
+        exact = get_exact_answer(self.paper_id, question)
+        if exact:
+            # compare normalized stored question to normalized incoming
+            stored_q = (exact.question or "").strip().lower()
+            if re.sub(r"\s+", " ", stored_q) == norm_q:
+                result = {
+                    "answer": exact.answer,
+                    "response_time_sec": 0.01,
+                    "cached": True,
+                }
+                try:
+                    cache.set(cache_key, result)
+                except Exception:
+                    pass
+                return result
 
         past_qas = get_recent_questions(self.paper_id, limit=20)
         if past_qas:
@@ -270,12 +321,17 @@ class ResearchBrain:
             sims = cosine_sim(q_emb, np.array(past_embs))
             best_idx = sims.argmax()
 
-            if sims[best_idx] > 0.9:
-                return {
+            if sims[best_idx] > SIMILARITY_THRESHOLD:
+                result = {
                     "answer": past_qas[best_idx].answer,
                     "response_time_sec": 0.01,
                     "cached": True,
                 }
+                try:
+                    cache.set(cache_key, result)
+                except Exception:
+                    pass
+                return result
 
         context = trim_context(self.retriever.retrieve(question, TOP_K))
 
@@ -283,8 +339,15 @@ class ResearchBrain:
             answer = self.chat_llm.generate(ask_prompt(context, question))
 
         save_qa(self.paper_id, question, answer)
-        return {
+
+        result = {
             "answer": answer,
             "response_time_sec": timer.elapsed,
             "cached": False,
         }
+        try:
+            cache.set(cache_key, result)
+        except Exception:
+            pass
+
+        return result

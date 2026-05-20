@@ -13,3 +13,6 @@ pdfplumber
 pypdf
 python-docx
 docx2txt
+redis
+rq
+prometheus_client

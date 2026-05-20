@@ -7,12 +7,16 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from document_summarizer.brain.brain import ResearchBrain
+from document_summarizer import cache
 from document_summarizer.brain.config import TOP_K
 from document_summarizer.brain.prompts.analysis import full_analysis_prompt
 from document_summarizer.brain.persistence.analysis_store import get_analysis, save_analysis
 from document_summarizer.brain.persistence.paper_store import list_papers, count_chunks, load_chunks
 from document_summarizer.brain.persistence.qa_store import count_questions
 from document_summarizer.brain.utils.timer import Timer
+from document_summarizer.metrics import record_request
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+import time
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -157,6 +161,18 @@ def ask_paper(req: AskRequest):
 @app.get("/summary/{paper_id}")
 def get_summary(paper_id: int):
     try:
+        t0 = time.perf_counter()
+        # check shared cache first
+        summary_key = cache.make_key("summary", paper_id)
+        cached = cache.get(summary_key)
+        if cached:
+            return {
+                "summary": cached.get("summary"),
+                "fact_points": cached.get("fact_points", []),
+                "analysis_time_sec": cached.get("analysis_time_sec", 0),
+                "precomputed": True,
+            }
+
         analysis = get_analysis(paper_id)
         if not analysis:
             brain = get_brain()
@@ -181,12 +197,24 @@ def get_summary(paper_id: int):
                 if point:
                     fact_points.append(point)
 
-            return {
+            # cache summary in Redis for fast retrieval
+            try:
+                cache.set(summary_key, {
+                    "summary": summary,
+                    "fact_points": fact_points,
+                    "analysis_time_sec": timer.elapsed,
+                })
+            except Exception:
+                pass
+
+            resp = {
                 "summary": summary,
                 "fact_points": fact_points,
                 "analysis_time_sec": timer.elapsed,
                 "precomputed": False,
             }
+            record_request("summary", time.perf_counter() - t0)
+            return resp
 
         fact_points = []
         for raw_line in (analysis.key_learnings or "").splitlines():
@@ -194,12 +222,14 @@ def get_summary(paper_id: int):
             if point:
                 fact_points.append(point)
 
-        return {
+        resp = {
             "summary": analysis.summary,
             "fact_points": fact_points,
             "analysis_time_sec": analysis.analysis_time_sec,
             "precomputed": True,
         }
+        record_request("summary", time.perf_counter() - t0)
+        return resp
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -246,16 +276,25 @@ def get_analysis_api(paper_id: int):
 @app.get("/stats/{paper_id}")
 def get_stats(paper_id: int):
     try:
+        t0 = time.perf_counter()
         total_chunks = count_chunks(paper_id)
         total_questions = count_questions(paper_id)
 
-        return {
+        resp = {
             "total_chunks": total_chunks,
             "total_questions": total_questions
         }
+        record_request("stats", time.perf_counter() - t0)
+        return resp
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/metrics")
+def metrics():
+    data = generate_latest()
+    return JSONResponse(content=data.decode("utf-8"), media_type=CONTENT_TYPE_LATEST)
 
 
 # ---------- Search ----------
@@ -264,13 +303,26 @@ def search(req: SearchRequest):
     brain = get_brain()
 
     try:
+        t0 = time.perf_counter()
         brain.load(req.paper_id)
 
         if not brain.retriever:
             raise HTTPException(status_code=404, detail="Paper not loaded properly")
 
+        # check cache for this query
+        key = cache.make_key("search", req.paper_id, cache.hash_text(req.query.strip().lower()))
+        cached = cache.get(key)
+        if cached:
+            return {"results": cached.get("results", [])}
+
         results = brain.retriever.retrieve(req.query, TOP_K)
 
+        try:
+            cache.set(key, {"results": results})
+        except Exception:
+            pass
+
+        record_request("search", time.perf_counter() - t0)
         return {"results": results}
 
     except HTTPException as e:
