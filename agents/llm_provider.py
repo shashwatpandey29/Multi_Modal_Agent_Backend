@@ -191,13 +191,17 @@ def _resolve_openai_client_kwargs(model: str) -> Dict[str, str]:
     openai_api_key = os.getenv("OPENAI_API_KEY", "").strip()
     openai_base_url = os.getenv("OPENAI_BASE_URL", "").strip()
 
-    api_key = nvidia_api_key or openai_api_key or _require_env("OPENAI_API_KEY")
-
     if model.startswith(("openai/gpt-oss-", "gpt-oss-")):
+        if not nvidia_api_key:
+            raise ValueError("NVIDIA_API_KEY is required for gpt-oss models")
+
+        api_key = nvidia_api_key
         base_url = nvidia_base_url or "https://integrate.api.nvidia.com/v1"
     elif nvidia_api_key:
+        api_key = nvidia_api_key
         base_url = nvidia_base_url or "https://integrate.api.nvidia.com/v1"
     else:
+        api_key = openai_api_key or _require_env("OPENAI_API_KEY")
         base_url = openai_base_url or nvidia_base_url or "https://integrate.api.nvidia.com/v1"
 
     return {"api_key": api_key, "base_url": base_url}
