@@ -147,9 +147,8 @@ def get_papers():
 # ---------- Ask ----------
 @app.post("/ask")
 def ask_paper(req: AskRequest):
-    brain = get_brain()
-
     try:
+        brain = get_brain()
         brain.load(req.paper_id)
         return brain.ask(req.question)
 

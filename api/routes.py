@@ -653,9 +653,8 @@ def ask_paper(req: AskRequest):
             {"paper_id": req.paper_id, "question": req.question},
         )
 
-    brain = _get_local_brain()
-
     try:
+        brain = _get_local_brain()
         brain.load(req.paper_id)
         return brain.ask(req.question)
 

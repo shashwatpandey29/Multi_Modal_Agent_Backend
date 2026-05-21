@@ -77,6 +77,19 @@ class ChatRoutesContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertEqual(response.json().get("detail"), "boom")
 
+    def test_ask_route_brain_init_failure_maps_to_http_400(self) -> None:
+        with patch("api.routes._use_docsum_proxy", return_value=False), patch(
+            "api.routes._get_local_brain",
+            side_effect=RuntimeError("brain init failed"),
+        ):
+            response = self.client.post(
+                "/ai/ask",
+                json={"paper_id": 123, "question": "What is this paper about?"},
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json().get("detail"), "brain init failed")
+
     def test_stream_route_forwards_response_length_and_formats_events(self) -> None:
         request_id = "req-stream-789"
 
