@@ -85,20 +85,37 @@ app.add_middleware(
 @app.middleware("http")
 async def ensure_cors_headers(request, call_next):
     """
-    Defensive CORS fallback for cases where upstream/runtime errors can
-    return without CORS headers and browsers surface it as a CORS failure.
+    Defensive CORS fallback & fast-path for preflight.
     """
-    response = await call_next(request)
-
     origin = request.headers.get("origin")
+
+    # Intercept OPTIONS fully to ensure corporate proxies and strict modes pass
+    if request.method == "OPTIONS":
+        response = Response(status_code=204)
+        if _origin_allowed(origin):
+            response.headers["Access-Control-Allow-Origin"] = origin.strip().rstrip("/")
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+            req_headers = request.headers.get("access-control-request-headers", "*")
+            response.headers["Access-Control-Allow-Headers"] = req_headers
+            response.headers["Vary"] = "Origin"
+        return response
+
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        response = JSONResponse(status_code=500, content={"detail": f"Internal Server Error: {str(exc)}"})
+
     if _origin_allowed(origin) and "access-control-allow-origin" not in response.headers:
         response.headers["Access-Control-Allow-Origin"] = origin.strip().rstrip("/")
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Vary"] = "Origin"
 
         req_headers = request.headers.get("access-control-request-headers", "*")
-        response.headers["Access-Control-Allow-Headers"] = req_headers
-        response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+        if req_headers:
+            response.headers["Access-Control-Allow-Headers"] = req_headers
+        if "access-control-allow-methods" not in response.headers:
+            response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
 
     return response
 

@@ -16,17 +16,21 @@ def make_key(*parts) -> str:
 
 
 def get(key: str) -> Optional[dict]:
-    v = _client.get(key)
-    if not v:
-        return None
     try:
+        v = _client.get(key)
+        if not v:
+            return None
         return json.loads(v)
     except Exception:
+        # Ignore redis connection errors or parsing errors to fallback gracefully
         return None
 
 
 def set(key: str, value, ttl: int = CACHE_TTL):
-    _client.set(key, json.dumps(value), ex=ttl)
+    try:
+        _client.set(key, json.dumps(value), ex=ttl)
+    except Exception:
+        pass
 
 
 def hash_text(text: str) -> str:
