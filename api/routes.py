@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 import json
 import os
 import shutil
+import logging
 import requests
 
 # ----------------------------
@@ -27,6 +28,7 @@ from agents.memory import (
     import_knowledge_bridge,
     set_session_mode,
 )
+from document_summarizer.brain.exceptions import EmbeddingError, LLMError, PDFLoadError
 
 # ----------------------------
 # Document Summarizer Proxy Config
@@ -52,6 +54,7 @@ PISTON_RUNTIME_BY_LANGUAGE_ID: Dict[int, Dict[str, str]] = {
 }
 
 _REQUEST_ID_SANITIZER = re.compile(r"[^A-Za-z0-9._:-]+")
+LOGGER = logging.getLogger(__name__)
 
 
 router = APIRouter(
@@ -353,6 +356,38 @@ def _get_local_brain():
     return ResearchBrain()
 
 
+def _upload_http_error(exc: Exception) -> HTTPException:
+    detail = str(exc) or exc.__class__.__name__
+    lowered = detail.lower()
+
+    if isinstance(exc, (PDFLoadError, EmbeddingError, LLMError)):
+        status_code = 503
+    elif isinstance(exc, ValueError) or "no readable text" in lowered or "no valid chunks" in lowered:
+        status_code = 400
+    elif "nvidia_api_key" in lowered or "embedding" in lowered or "provider" in lowered:
+        status_code = 503
+    else:
+        status_code = 500
+
+    return HTTPException(status_code=status_code, detail=detail)
+
+
+def _ask_http_error(exc: Exception) -> HTTPException:
+    detail = str(exc) or exc.__class__.__name__
+    lowered = detail.lower()
+
+    if isinstance(exc, (EmbeddingError, LLMError)):
+        status_code = 503
+    elif "paper not ingested" in lowered or "paper has no chunks" in lowered or "summary not available" in lowered:
+        status_code = 404
+    elif "nvidia_api_key" in lowered or "embedding" in lowered or "provider" in lowered:
+        status_code = 503
+    else:
+        status_code = 400
+
+    return HTTPException(status_code=status_code, detail=detail)
+
+
 # ==========================================================
 # 🔹 AI GENERATION ROUTES
 # ==========================================================
@@ -616,11 +651,8 @@ def upload_paper(file: UploadFile = File(...)):
         raise e
 
     except Exception as e:
-        error_text = str(e)
-        if "NVIDIA_API_KEY" in error_text or "embedding" in error_text.lower() or "provider" in error_text.lower():
-            raise HTTPException(status_code=503, detail=error_text)
-
-        raise HTTPException(status_code=500, detail=error_text)
+        LOGGER.exception("Upload failed")
+        raise _upload_http_error(e)
 
 
 # ---------- List Papers ----------
@@ -662,7 +694,8 @@ def ask_paper(req: AskRequest):
         return brain.ask(req.question)
 
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        LOGGER.exception("Ask failed")
+        raise _ask_http_error(e)
 
 
 # ---------- Summary ----------

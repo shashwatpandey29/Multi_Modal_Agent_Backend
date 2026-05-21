@@ -1,6 +1,7 @@
 # server.py
 import os
 import shutil
+import logging
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -9,6 +10,7 @@ from pydantic import BaseModel
 from document_summarizer.brain.brain import ResearchBrain
 from document_summarizer import cache
 from document_summarizer.brain.config import TOP_K
+from document_summarizer.brain.exceptions import EmbeddingError, LLMError, PDFLoadError
 from document_summarizer.brain.prompts.analysis import full_analysis_prompt
 from document_summarizer.brain.persistence.analysis_store import get_analysis, save_analysis
 from document_summarizer.brain.persistence.paper_store import list_papers, count_chunks, load_chunks
@@ -21,6 +23,7 @@ import time
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 DOCSUM_INTERNAL_TOKEN = os.getenv("DOCSUM_INTERNAL_TOKEN", "").strip()
+LOGGER = logging.getLogger(__name__)
 
 app = FastAPI(title="AI Research Paper Analyzer API")
 
@@ -58,6 +61,38 @@ class SearchRequest(BaseModel):
 
 def get_brain():
     return ResearchBrain()
+
+
+def _upload_http_error(exc: Exception) -> HTTPException:
+    detail = str(exc) or exc.__class__.__name__
+    lowered = detail.lower()
+
+    if isinstance(exc, (PDFLoadError, EmbeddingError, LLMError)):
+        status_code = 503
+    elif isinstance(exc, ValueError) or "no readable text" in lowered or "no valid chunks" in lowered:
+        status_code = 400
+    elif "nvidia_api_key" in lowered or "embedding" in lowered or "provider" in lowered:
+        status_code = 503
+    else:
+        status_code = 500
+
+    return HTTPException(status_code=status_code, detail=detail)
+
+
+def _ask_http_error(exc: Exception) -> HTTPException:
+    detail = str(exc) or exc.__class__.__name__
+    lowered = detail.lower()
+
+    if isinstance(exc, (EmbeddingError, LLMError)):
+        status_code = 503
+    elif "paper not ingested" in lowered or "paper has no chunks" in lowered or "summary not available" in lowered:
+        status_code = 404
+    elif "nvidia_api_key" in lowered or "embedding" in lowered or "provider" in lowered:
+        status_code = 503
+    else:
+        status_code = 400
+
+    return HTTPException(status_code=status_code, detail=detail)
 
 
 def _parse_full_analysis(full_analysis: str):
@@ -126,7 +161,8 @@ def upload_paper(file: UploadFile = File(...)):
         raise e
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        LOGGER.exception("Upload failed")
+        raise _upload_http_error(e)
 
 
 # ---------- List Papers ----------
@@ -152,7 +188,8 @@ def ask_paper(req: AskRequest):
         return brain.ask(req.question)
 
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        LOGGER.exception("Ask failed")
+        raise _ask_http_error(e)
 
 
 # ---------- Summary ----------
