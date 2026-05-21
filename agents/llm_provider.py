@@ -190,21 +190,16 @@ def _ollama_chat_completion(messages: List[Message], model: str) -> str:
 def _resolve_openai_client_kwargs(model: str) -> Dict[str, str]:
     nvidia_api_key = os.getenv("NVIDIA_API_KEY", "").strip()
     nvidia_base_url = os.getenv("NVIDIA_API_BASE_URL", "").strip()
-    openai_api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    openai_base_url = os.getenv("OPENAI_BASE_URL", "").strip()
+
+    if not nvidia_api_key:
+        raise ValueError("NVIDIA_API_KEY is required for answer generation")
 
     if model.startswith(("openai/gpt-oss-", "gpt-oss-")):
-        if not nvidia_api_key:
-            raise ValueError("NVIDIA_API_KEY is required for gpt-oss models")
-
-        api_key = nvidia_api_key
-        base_url = nvidia_base_url or "https://integrate.api.nvidia.com/v1"
-    elif nvidia_api_key:
         api_key = nvidia_api_key
         base_url = nvidia_base_url or "https://integrate.api.nvidia.com/v1"
     else:
-        api_key = openai_api_key or _require_env("OPENAI_API_KEY")
-        base_url = openai_base_url or nvidia_base_url or "https://integrate.api.nvidia.com/v1"
+        api_key = nvidia_api_key
+        base_url = nvidia_base_url or "https://integrate.api.nvidia.com/v1"
 
     return {"api_key": api_key, "base_url": base_url}
 
@@ -504,40 +499,16 @@ def chat_completion(
     use_case: str = "chat",
     model_override: Optional[str] = None,
 ) -> str:
-    provider = get_llm_provider()
     temperature = _env_float("LLM_TEMPERATURE", 0.3)
     timeout_sec = _env_int("LLM_TIMEOUT_SEC", 60)
     selected_model = (model_override or "").strip() or None
     models = _resolve_models_for_use_case(use_case)
 
     def _call_provider():
-        if provider in {"chatgpt", "openai"}:
-            return _openai_chat_completion(
-                messages=messages,
-                model=selected_model or models["openai"],
-                temperature=temperature,
-            )
-
-        if provider == "gemini":
-            return _gemini_chat_completion(
-                messages=messages,
-                model=selected_model or models["gemini"],
-                temperature=temperature,
-                timeout_sec=timeout_sec,
-            )
-
-        if provider == "openrouter":
-            return _openrouter_chat_completion(
-                messages=messages,
-                model=selected_model or models["openrouter"],
-                temperature=temperature,
-            )
-
-        if provider == "ollama":
-            return _ollama_chat_completion(messages=messages, model=selected_model or models["ollama"])
-
-        raise ValueError(
-            "Unsupported LLM_PROVIDER. Use one of: chatgpt, openai, gemini, openrouter, ollama"
+        return _openai_chat_completion(
+            messages=messages,
+            model=selected_model or models["openai"],
+            temperature=temperature,
         )
 
     # run provider call with timeout in thread to avoid blocking indefinitely
@@ -558,40 +529,16 @@ def chat_completion_stream(
     use_case: str = "chat",
     model_override: Optional[str] = None,
 ) -> Iterator[str]:
-    provider = get_llm_provider()
     temperature = _env_float("LLM_TEMPERATURE", 0.3)
     timeout_sec = _env_int("LLM_TIMEOUT_SEC", 60)
     selected_model = (model_override or "").strip() or None
     models = _resolve_models_for_use_case(use_case)
 
     try:
-        if provider in {"chatgpt", "openai"}:
-            return _openai_chat_completion_stream(
-                messages=messages,
-                model=selected_model or models["openai"],
-                temperature=temperature,
-            )
-
-        if provider == "gemini":
-            return _gemini_chat_completion_stream(
-                messages=messages,
-                model=selected_model or models["gemini"],
-                temperature=temperature,
-                timeout_sec=timeout_sec,
-            )
-
-        if provider == "openrouter":
-            return _openrouter_chat_completion_stream(
-                messages=messages,
-                model=selected_model or models["openrouter"],
-                temperature=temperature,
-            )
-
-        if provider == "ollama":
-            return _ollama_chat_completion_stream(messages=messages, model=selected_model or models["ollama"])
-
-        raise ValueError(
-            "Unsupported LLM_PROVIDER. Use one of: chatgpt, openai, gemini, openrouter, ollama"
+        return _openai_chat_completion_stream(
+            messages=messages,
+            model=selected_model or models["openai"],
+            temperature=temperature,
         )
     except Exception:
         return _stream_text_chunks(_offline_completion(messages=messages, use_case=use_case))

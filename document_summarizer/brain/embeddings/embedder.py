@@ -17,16 +17,11 @@ class Embedder:
 
         if self.provider in {"openai", "api"}:
             nvidia_api_key = os.getenv("NVIDIA_API_KEY", "").strip()
-            api_key = nvidia_api_key or os.getenv("OPENAI_API_KEY", "").strip()
-            if not api_key:
-                raise EmbeddingError(
-                    "NVIDIA_API_KEY or OPENAI_API_KEY is required when EMBEDDING_PROVIDER is openai/api"
-                )
+            if not nvidia_api_key:
+                raise EmbeddingError("NVIDIA_API_KEY is required when EMBEDDING_PROVIDER is openai/api")
 
-            if nvidia_api_key:
-                base_url = os.getenv("NVIDIA_API_BASE_URL", "").strip() or "https://integrate.api.nvidia.com/v1"
-            else:
-                base_url = os.getenv("OPENAI_BASE_URL", "").strip() or os.getenv("NVIDIA_API_BASE_URL", "").strip() or "https://integrate.api.nvidia.com/v1"
+            api_key = nvidia_api_key
+            base_url = os.getenv("NVIDIA_API_BASE_URL", "").strip() or "https://integrate.api.nvidia.com/v1"
 
             client_kwargs = {"api_key": api_key}
             if base_url:
