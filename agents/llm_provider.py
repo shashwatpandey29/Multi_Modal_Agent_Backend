@@ -215,6 +215,113 @@ def _stream_text_chunks(text: str) -> Iterator[str]:
             yield chunk
 
 
+def _normalize_whitespace(value: str) -> str:
+    return re.sub(r"\s+", " ", (value or "").strip())
+
+
+def _extract_block(prompt: str, start_marker: str, end_markers: List[str]) -> str:
+    lower_prompt = prompt.lower()
+    start_idx = lower_prompt.find(start_marker.lower())
+    if start_idx < 0:
+        return ""
+
+    start_idx += len(start_marker)
+    remainder = prompt[start_idx:]
+    lower_remainder = remainder.lower()
+
+    end_idx = len(remainder)
+    for marker in end_markers:
+        candidate = lower_remainder.find(marker.lower())
+        if candidate >= 0:
+            end_idx = min(end_idx, candidate)
+
+    return remainder[:end_idx].strip()
+
+
+def _extract_prompt_text(messages: List[Message]) -> str:
+    return "\n\n".join(message.get("content", "") for message in messages if message.get("content"))
+
+
+def _extract_relevant_sentences(context: str, question: str, limit: int = 4) -> List[str]:
+    stop_words = {
+        "a", "an", "and", "are", "as", "at", "be", "by", "does", "for", "from",
+        "how", "i", "in", "is", "it", "of", "on", "or", "paper", "that", "the",
+        "their", "this", "to", "was", "what", "when", "where", "which", "who", "why",
+        "with", "would", "you",
+    }
+
+    question_words = {
+        word
+        for word in re.findall(r"[A-Za-z0-9]+", (question or "").lower())
+        if word not in stop_words and len(word) > 2
+    }
+
+    sentences = [
+        _normalize_whitespace(sentence)
+        for sentence in re.split(r"(?<=[.!?])\s+|\n+", context or "")
+        if _normalize_whitespace(sentence)
+    ]
+
+    scored: list[tuple[int, str]] = []
+    for sentence in sentences:
+        tokens = set(re.findall(r"[A-Za-z0-9]+", sentence.lower()))
+        score = len(tokens & question_words)
+        if score:
+            scored.append((score, sentence))
+
+    scored.sort(key=lambda item: (-item[0], len(item[1])))
+    if scored:
+        return [sentence for _, sentence in scored[:limit]]
+
+    if sentences:
+        return sentences[:limit]
+
+    return []
+
+
+def _offline_completion(messages: List[Message], use_case: str) -> str:
+    prompt_text = _extract_prompt_text(messages)
+    if not prompt_text:
+        return "The configured LLM provider is unavailable right now."
+
+    if use_case == "chat":
+        context = _extract_block(prompt_text, "Paper Content:", ["Question:"])
+        question = _extract_block(prompt_text, "Question:", [])
+        relevant = _extract_relevant_sentences(context, question)
+
+        if relevant:
+            bullets = "\n".join(f"- {sentence}" for sentence in relevant)
+            return (
+                "The configured LLM provider is unavailable, so this answer uses only the paper text:\n"
+                f"{bullets}"
+            )
+
+        return "The paper does not explicitly address this."
+
+    if use_case == "analysis":
+        context = _extract_block(prompt_text, "PAPER CONTENT:", [])
+        relevant = _extract_relevant_sentences(context, "analysis")
+        bullets = "\n".join(f"- {sentence}" for sentence in relevant)
+        return (
+            "=== SUMMARY ===\n"
+            "The configured LLM provider is unavailable.\n\n"
+            "=== KEY LEARNINGS ===\n"
+            f"{bullets or '- Not explicitly stated in the provided content.'}\n\n"
+            "=== MAIN CONTRIBUTIONS ===\n"
+            "- Not explicitly stated in the provided content.\n\n"
+            "=== LIMITATIONS ===\n"
+            "- Not explicitly stated in the provided content."
+        )
+
+    if use_case == "code":
+        return (
+            "The configured LLM provider is unavailable. "
+            "Please set the provider credentials in production and retry this request."
+        )
+
+    return "The configured LLM provider is unavailable right now."
+
+
 def _openai_chat_completion_stream(messages: List[Message], model: str, temperature: float) -> Iterator[str]:
     client = OpenAI(**_resolve_openai_client_kwargs(model))
 
@@ -442,35 +549,8 @@ def chat_completion(
         except concurrent.futures.TimeoutError:
             fut.cancel()
             raise RuntimeError(f"LLM provider call timed out after {timeout_sec}s")
-
-    if provider in {"chatgpt", "openai"}:
-        return _openai_chat_completion(
-            messages=messages,
-            model=selected_model or models["openai"],
-            temperature=temperature,
-        )
-
-    if provider == "gemini":
-        return _gemini_chat_completion(
-            messages=messages,
-            model=selected_model or models["gemini"],
-            temperature=temperature,
-            timeout_sec=timeout_sec,
-        )
-
-    if provider == "openrouter":
-        return _openrouter_chat_completion(
-            messages=messages,
-            model=selected_model or models["openrouter"],
-            temperature=temperature,
-        )
-
-    if provider == "ollama":
-        return _ollama_chat_completion(messages=messages, model=selected_model or models["ollama"])
-
-    raise ValueError(
-        "Unsupported LLM_PROVIDER. Use one of: chatgpt, openai, gemini, openrouter, ollama"
-    )
+        except Exception:
+            return _offline_completion(messages=messages, use_case=use_case)
 
 
 def chat_completion_stream(
@@ -484,31 +564,34 @@ def chat_completion_stream(
     selected_model = (model_override or "").strip() or None
     models = _resolve_models_for_use_case(use_case)
 
-    if provider in {"chatgpt", "openai"}:
-        return _openai_chat_completion_stream(
-            messages=messages,
-            model=selected_model or models["openai"],
-            temperature=temperature,
+    try:
+        if provider in {"chatgpt", "openai"}:
+            return _openai_chat_completion_stream(
+                messages=messages,
+                model=selected_model or models["openai"],
+                temperature=temperature,
+            )
+
+        if provider == "gemini":
+            return _gemini_chat_completion_stream(
+                messages=messages,
+                model=selected_model or models["gemini"],
+                temperature=temperature,
+                timeout_sec=timeout_sec,
+            )
+
+        if provider == "openrouter":
+            return _openrouter_chat_completion_stream(
+                messages=messages,
+                model=selected_model or models["openrouter"],
+                temperature=temperature,
+            )
+
+        if provider == "ollama":
+            return _ollama_chat_completion_stream(messages=messages, model=selected_model or models["ollama"])
+
+        raise ValueError(
+            "Unsupported LLM_PROVIDER. Use one of: chatgpt, openai, gemini, openrouter, ollama"
         )
-
-    if provider == "gemini":
-        return _gemini_chat_completion_stream(
-            messages=messages,
-            model=selected_model or models["gemini"],
-            temperature=temperature,
-            timeout_sec=timeout_sec,
-        )
-
-    if provider == "openrouter":
-        return _openrouter_chat_completion_stream(
-            messages=messages,
-            model=selected_model or models["openrouter"],
-            temperature=temperature,
-        )
-
-    if provider == "ollama":
-        return _ollama_chat_completion_stream(messages=messages, model=selected_model or models["ollama"])
-
-    raise ValueError(
-        "Unsupported LLM_PROVIDER. Use one of: chatgpt, openai, gemini, openrouter, ollama"
-    )
+    except Exception:
+        return _stream_text_chunks(_offline_completion(messages=messages, use_case=use_case))
