@@ -589,9 +589,8 @@ def upload_paper(file: UploadFile = File(...)):
     if _use_docsum_proxy():
         return _proxy_upload(file)
 
-    brain = _get_local_brain()
-
     try:
+        brain = _get_local_brain()
         filename = file.filename
         ext = os.path.splitext(filename)[1].lower()
 
@@ -617,7 +616,11 @@ def upload_paper(file: UploadFile = File(...)):
         raise e
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        error_text = str(e)
+        if "NVIDIA_API_KEY" in error_text or "embedding" in error_text.lower() or "provider" in error_text.lower():
+            raise HTTPException(status_code=503, detail=error_text)
+
+        raise HTTPException(status_code=500, detail=error_text)
 
 
 # ---------- List Papers ----------

@@ -90,6 +90,19 @@ class ChatRoutesContractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json().get("detail"), "brain init failed")
 
+    def test_upload_route_brain_init_failure_maps_to_http_503(self) -> None:
+        with patch("api.routes._use_docsum_proxy", return_value=False), patch(
+            "api.routes._get_local_brain",
+            side_effect=RuntimeError("NVIDIA_API_KEY is required for answer generation"),
+        ):
+            response = self.client.post(
+                "/ai/upload",
+                files={"file": ("paper.pdf", b"dummy pdf bytes", "application/pdf")},
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("NVIDIA_API_KEY", response.json().get("detail", ""))
+
     def test_stream_route_forwards_response_length_and_formats_events(self) -> None:
         request_id = "req-stream-789"
 

@@ -99,9 +99,8 @@ def root():
 # ---------- Upload ----------
 @app.post("/upload")
 def upload_paper(file: UploadFile = File(...)):
-    brain = get_brain()
-
     try:
+        brain = get_brain()
         filename = file.filename
         ext = os.path.splitext(filename)[1].lower()
 
