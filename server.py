@@ -1,4 +1,5 @@
 import os
+import re
 
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -55,6 +56,21 @@ def _build_cors_origins() -> list[str]:
 
 origins = _build_cors_origins()
 origin_regex = os.getenv("CORS_ALLOW_ORIGIN_REGEX", r"https://.*\.vercel\.app")
+_origin_pattern = re.compile(origin_regex) if origin_regex else None
+
+
+def _origin_allowed(origin: str | None) -> bool:
+    if not origin:
+        return False
+
+    normalized = origin.strip().rstrip("/")
+    if normalized in origins:
+        return True
+
+    if _origin_pattern and _origin_pattern.match(normalized):
+        return True
+
+    return False
 
 app.add_middleware(
     CORSMiddleware,
@@ -64,6 +80,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def ensure_cors_headers(request, call_next):
+    """
+    Defensive CORS fallback for cases where upstream/runtime errors can
+    return without CORS headers and browsers surface it as a CORS failure.
+    """
+    response = await call_next(request)
+
+    origin = request.headers.get("origin")
+    if _origin_allowed(origin) and "access-control-allow-origin" not in response.headers:
+        response.headers["Access-Control-Allow-Origin"] = origin.strip().rstrip("/")
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
+
+        req_headers = request.headers.get("access-control-request-headers", "*")
+        response.headers["Access-Control-Allow-Headers"] = req_headers
+        response.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+
+    return response
 
 # ---------------------------------------
 # Include AI Router
